@@ -1,0 +1,543 @@
+// Google Meet — a RECONSTRUCTED protobuf schema.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// THIS IS NOT GOOGLE'S SCHEMA. Google publishes none of this.
+//
+// Field NUMBERS and WIRE TYPES are observed fact, read off captured traffic.
+// Field NAMES are invented here, except where a name appeared verbatim in an
+// UpdateMeetingDevice field mask. Names marked `unknown_<n>` are fields whose
+// purpose is genuinely unread; they are included because omitting them has been
+// observed to get requests refused.
+//
+// Message names, service names below the two that were captured in full, and
+// every enum value name are likewise invented.
+//
+// Use this to generate an encoder. Do not use it to reason about intent.
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Snapshot: Chrome 150 / Meet as served July 2026.
+// Prose:    ../docs/05-create-media-session.md
+// Bytes:    ./wire-samples.md
+// Map:      ./field-maps.md
+
+syntax = "proto3";
+
+package reconstructed.google.rtc.meetings.v1;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SERVICES
+//
+// Transport: POST https://meet.google.com/$rpc/<Service>/<Method>
+//   request  body = gzip(protobuf), content-encoding: gzip
+//   response body = base64(protobuf), i.e. grpc-web-text
+//   no 5-byte gRPC length prefix in practice
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Fully-qualified name captured verbatim.
+service MeetingSpaceService {
+  // Meeting and participant state. Doubles as a 20-second long-poll, and is the
+  // main source of rotated meeting tokens in X-Goog-Meeting-Token response
+  // headers.  Token scope: STATE.
+  rpc SyncMeetingSpaceCollections(SyncMeetingSpaceCollectionsRequest)
+      returns (SyncMeetingSpaceCollectionsResponse);
+}
+
+// Service name INFERRED. The capture recorded it by short name only.
+// A wrong prefix returns 404, not 400 — cheap to verify.
+service MediaSessionService {
+  // Token scope: MEDIA — the bootstrap token, never the rotated state one.
+  // Also requires x-goog-meeting-debugid.
+  rpc CreateMediaSession(CreateMediaSessionRequest)
+      returns (CreateMediaSessionResponse);
+
+  // Empty request body. Returns Google STUN/TURN with credentials.
+  rpc IssueIceServerConfig(IssueIceServerConfigRequest)
+      returns (IssueIceServerConfigResponse);
+}
+
+service MeetingDeviceService {
+  // Field-masked. Token scope: STATE.
+  // 403 for another participant's device, 200 for your own — usable as a probe.
+  rpc UpdateMeetingDevice(UpdateMeetingDeviceRequest) returns (MeetingDevice);
+}
+
+service MeetingHandRaiseService {
+  rpc CreateHandRaise(CreateHandRaiseRequest) returns (HandRaise);   // body undecoded
+  rpc DeleteHandRaise(DeleteHandRaiseRequest) returns (HandRaise);   // body undecoded
+}
+
+service MeetingUserService {
+  rpc GetUser(GetUserRequest) returns (User);                        // body undecoded
+}
+
+service MeetingCalendarAgendaService {
+  // Title, times, invitees. The most plausible route to participant emails,
+  // which appear nowhere else in any capture.
+  rpc FetchCalendarEvent(FetchCalendarEventRequest) returns (CalendarEvent);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SyncMeetingSpaceCollections
+// ═════════════════════════════════════════════════════════════════════════════
+
+message SyncMeetingSpaceCollectionsRequest {
+  // The entire body. 19 bytes on the wire for a 12-character space id.
+  string space = 1;                        // "spaces/<id>"
+}
+
+message SyncMeetingSpaceCollectionsResponse {
+  // Contents gated by subscription: a client that opens no panels receives
+  // almost nothing. Not decoded field by field.
+  bytes  opaque = 1;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CreateMediaSession   —  ~2893 bytes decompressed, ~5222 back
+//
+// Nothing in this message names the meeting. The space travels in the
+// x-goog-meeting-identifier header.
+// ═════════════════════════════════════════════════════════════════════════════
+
+message CreateMediaSessionRequest {
+  MediaSession media_session = 1;
+  // field 2 unused in every capture
+}
+
+message MediaSession {
+  // Client-minted, and NOT arbitrary: base64url(random(10) ++ 11 constant
+  // bytes), no padding, prefixed "mediasessions/". A fully random id of the
+  // right length is refused exactly as loudly as a malformed one.
+  string    name      = 1;
+  Transport transport = 3;
+}
+
+message Transport {
+  DtlsParameters             dtls               = 1;
+  IceParameters              ice                = 2;
+  repeated Codec             codecs             = 3;
+  repeated HeaderExtension   header_extensions  = 4;
+  BandwidthHints             bandwidth          = 5;
+
+  UnknownBlock7              unknown_7          = 7;   // { 1: 4 }
+  UnknownBlock8              unknown_8          = 8;   // { 1: 1, 2: 2 }
+
+  repeated ChannelRequest    data_channels      = 17;  // NOT an SDP m=application
+
+  UnknownBlock19             unknown_19         = 19;  // { 1: 2 }
+  uint64                     unknown_36         = 36;  // 2
+  uint64                     unknown_42         = 42;  // 1
+  DecodeHardware             decode_hardware    = 45;
+  DecodeCapabilities         decode_capabilities = 46;
+  uint64                     unknown_50         = 50;  // 1
+}
+
+message DtlsParameters {
+  Fingerprint fingerprint = 1;
+  // THREE, not one. Guessed at 1 on the reasoning that actpass is the first of
+  // three roles; the capture says 3, and Meet rejects the whole request rather
+  // than naming the field. Relationship to the SDP setup string is unestablished.
+  uint64      setup_role  = 2;
+  uint64      setup_role_repeated = 3;
+}
+
+message Fingerprint {
+  string algorithm = 1;                    // "sha-256"
+  string value     = 2;                    // "AB:CD:EF:…"
+}
+
+message IceParameters {
+  // Fields 1 and 2 exist and were never populated in any capture.
+  // Writing the credentials there encodes cleanly and describes no transport.
+  string ufrag = 3;                        // 4 characters, always
+  string pwd   = 4;                        // 24 characters, always
+}
+
+message Codec {
+  uint64 payload_type = 1;
+  string name         = 2;                 // "opus", "VP8", "rtx" — bare name
+
+  // ⚠ MEDIA KIND, not a second clock rate. Its position between the name and
+  // the clock rate is the trap. 1 = audio, 2 = video. Every codec carries it,
+  // and omitting it alone is enough for refusal.
+  uint64 media_kind   = 3;
+
+  uint64 clock_rate   = 4;
+  uint64 channels     = 5;
+  repeated FormatParameter format_parameters = 6;
+
+  // Present ONLY on the secondary block. The only thing distinguishing two
+  // otherwise identical entries.
+  uint64 secondary_marker = 7;             // = 3
+
+  ScalabilityMode scalability = 8;         // video only
+  LayeredSupport  layered     = 9;         // video only
+}
+
+message FormatParameter {
+  string key   = 1;                        // "" for a bare parameter, e.g. "111/111"
+  string value = 2;
+}
+
+message ScalabilityMode {
+  uint64 mode = 1;                         // VP8: 0 · H265: 1 · VP9/AV1: 0
+  string name = 5;                         // "L1T1", H265 only
+}
+
+message LayeredSupport {
+  uint64 supported = 1;                    // VP8: 0 · everything else: 1
+}
+
+message HeaderExtension {
+  // The id is the number that appears in the RTP headers Meet sends back.
+  // Changing one changes how every packet parses. Copy verbatim.
+  uint64 id   = 1;
+  string uri  = 2;
+  uint64 kind = 3;                         // 1 = audio, 2 = video
+  uint64 flag = 4;                         // 1, except 2 on corruption-detection
+}
+
+message BandwidthHints {
+  uint64 unknown_2 = 2;                    // 6500
+  uint64 unknown_3 = 3;                    // 500
+}
+
+message UnknownBlock7  { uint64 unknown_1 = 1; }   // 4
+message UnknownBlock8  { uint64 unknown_1 = 1; uint64 unknown_2 = 2; }   // 1, 2
+message UnknownBlock19 { uint64 unknown_1 = 1; }   // 2
+
+message ChannelRequest {
+  string label     = 1;
+  uint64 unknown_2 = 2;                    // 0
+  uint64 unknown_4 = 4;                    // 1
+
+  // ⚠ OPAQUE BYTES, not a nested message. `02 01` read as a message describes
+  // field number zero, which protobuf does not permit — so a decoder produces
+  // nothing and a re-encoder silently writes {2: 1}. Both encode cleanly and
+  // only the server can tell them apart. `01` alone for meet-p2p-signaling.
+  bytes  options   = 7;
+}
+
+message DecodeHardware {
+  uint64 unknown_1 = 1;                    // 4
+  uint64 unknown_2 = 2;                    // 4
+  uint64 unknown_4 = 4;                    // 10
+  // The browser names its GPU here. It identifies the machine and describes
+  // nothing about the session — send a neutral string.
+  string renderer  = 6;
+}
+
+message DecodeCapabilities {
+  CapabilityFlags flags = 1;
+}
+
+message CapabilityFlags {
+  uint64 unknown_1  = 1;                   // 1
+  uint64 unknown_2  = 2;                   // 1
+  uint64 unknown_3  = 3;                   // 1
+  uint64 unknown_4  = 4;                   // 1
+  uint64 max_pixels_a = 5;                 // 2073600 = 1920 × 1080
+  uint64 max_pixels_b = 6;                 // 2073600
+  uint64 unknown_8  = 8;                   // 1
+  uint64 unknown_9  = 9;                   // 1
+  uint64 unknown_10 = 10;                  // 1
+  uint64 unknown_13 = 13;                  // 1
+  uint64 unknown_15 = 15;                  // 1
+  uint64 unknown_16 = 16;                  // 1
+  // A client that claims less than the browser does may simply be sent less.
+}
+
+message CreateMediaSessionResponse {
+  MediaSessionAnswer answer = 2;
+}
+
+message MediaSessionAnswer {
+  repeated IceCandidate      candidates = 3;
+  repeated CodecReference    codecs     = 4;   // payload type + name ONLY
+  repeated ChannelAssignment channels   = 12;  // the reason to parse this at all
+}
+
+message IceCandidate {
+  uint64 component = 1;
+  string address   = 2;
+  uint64 port      = 3;
+  uint64 priority  = 4;
+}
+
+message CodecReference {
+  uint64 payload_type = 1;
+  string name         = 2;
+  // Clock rate, channels and fmtp must be carried over from YOUR offer, matched
+  // by payload type, or every video codec is described at the audio clock rate.
+}
+
+message ChannelAssignment {
+  string label     = 1;
+  // Meet writes binary onto this stream with NO DCEP open message. Claim it as
+  // a pre-negotiated channel before the association comes up, or the stack
+  // reports "Unknown PayloadProtocolIdentifier 53".
+  // Server-chosen, differs per session. Observed 111–159, odd only.
+  uint64 stream_id = 3;
+}
+
+message IssueIceServerConfigRequest {}     // genuinely empty
+message IssueIceServerConfigResponse { bytes opaque = 1; }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// UpdateMeetingDevice
+// ═════════════════════════════════════════════════════════════════════════════
+
+message UpdateMeetingDeviceRequest {
+  MeetingDevice device      = 1;
+  FieldMask     update_mask = 2;
+}
+
+message MeetingDevice {
+  string name              = 1;            // "spaces/<id>/devices/<n>"
+  uint64 join_state        = 4;            // 1        (name inferred from mask order)
+
+  // The session id BARE — no "mediasessions/" prefix, where CreateMediaSession
+  // uses it with. Until this lands, Meet knows a session exists but not that it
+  // belongs to a participating device, and allocates nothing.
+  string cloud_session_id  = 22;
+
+  uint64 media_capture_type = 25;          // 1        (inferred)
+  uint64 participation_mode = 38;          // 1        (inferred)
+
+  AudioState audio_state   = 14;
+}
+
+message AudioState { uint64 state = 2; }
+
+message FieldMask {
+  // Names observed verbatim on the wire:
+  //   "audio_state" · "cloud_session_id" · "join_state"
+  //   "media_capture_type" · "participation_mode"
+  repeated string paths = 1;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Headers, as messages
+// ═════════════════════════════════════════════════════════════════════════════
+
+// x-goog-meeting-identifier, standard base64.
+// ⚠ Carries the SPACE ID, not the meeting code. Both are 12 characters, so both
+// encode to a 24-character header value and a length check cannot tell them
+// apart.  Also the ONLY place the space id appears before a join completes.
+message MeetingIdentifier {
+  uint64 kind     = 1;                     // 3 in every capture; meaning unknown
+  string space_id = 2;                     // bare id, no "spaces/" prefix
+}
+
+// x-goog-meeting-rtcclient = "CAEQqgMYASABKAg4AQ=="
+// The identical bytes also appear inside every dcrpc request at field 7.
+message RtcClient {
+  uint64 unknown_1 = 1;                    // 1
+  uint64 build     = 2;                    // 426
+  uint64 unknown_3 = 3;                    // 1
+  uint64 unknown_4 = 4;                    // 1
+  uint64 unknown_5 = 5;                    // 8
+  uint64 unknown_7 = 7;                    // 1
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DATA CHANNEL — media-director
+//
+// A connected session receives NOTHING until the client sends Configuration.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Shared with dcrpc. Meet compresses whichever frames it likes; both must be
+// handled on receive. Sending plain is accepted.
+message ChannelFrame {
+  bytes plain      = 1;
+  bytes compressed = 2;                    // gzip
+}
+
+message DirectorPayload {
+  DirectorRequest         request         = 1;
+  DirectorAcknowledgement acknowledgement = 2;
+}
+
+message DirectorRequest {
+  // Present on the client's opening frame.
+  uint64          sequence   = 1;
+  AcceptedSizes   sizes      = 2;
+
+  // Present on the server's allocation. Field 1 doubles as the allocation name.
+  // Discriminate by type, not by presence.
+  // string       name       = 1;
+  uint64          version    = 2;
+  AllocationGroups allocation = 3;
+}
+
+message AcceptedSizes {
+  Size preferred = 1;                      // 1280 × 720
+  // field 2 unused
+  Size maximum   = 3;                      // 1920 × 1080   ← field 3, not 2
+}
+
+message Size { uint64 width = 1; uint64 height = 2; }
+
+message AllocationGroups { repeated AllocationGroup groups = 1; }
+message AllocationGroup  { repeated AllocatedStream streams = 1; }
+
+message AllocatedStream {
+  StreamDescription description = 1;
+  uint64            unknown_2   = 2;       // 2
+}
+
+message StreamDescription {
+  SsrcHolder holder            = 1;
+  Size       size              = 2;
+  uint64     frames_per_second = 3;
+  uint64     bits_per_second   = 4;
+  string     scalability       = 5;        // "L1T2" / "L1T3" — no simulcast
+  uint64     payload_type      = 6;
+}
+
+message SsrcHolder {
+  // ⚠ FIXED32 — the ONLY one in this protocol. Read as a varint it yields a
+  // plausible number matching no arriving packet, and the session looks
+  // silently empty while RTP flows perfectly.
+  fixed32 ssrc = 1;
+}
+
+message DirectorAcknowledgement {
+  string name    = 1;
+  uint64 version = 2;
+  uint64 flag    = 3;                      // 1
+  // Not optional politeness: Meet re-sends an allocation until acknowledged.
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DATA CHANNEL — dcrpc
+//
+// The busiest channel. THE PAYLOAD'S FIELD NUMBER IS THE METHOD; nothing names
+// a method in words. Dispatch on field number and log unknown ones as data.
+// ═════════════════════════════════════════════════════════════════════════════
+
+message DcrpcMessage {
+  uint64          sequence     = 1;
+
+  bytes           unknown_2    = 2;        // method 2 — unclassified
+  DcrpcOpen       open         = 3;        // method 3 — request and reply
+  bytes           register     = 4;        // method 4 — client's own SSRCs 🧩 undecoded
+  StreamAnnouncements announcements = 5;   // method 5 — everyone else's SSRCs
+}
+
+message DcrpcOpen {
+  ClientIdentity identity = 1;
+  uint64         kind     = 2;             // sent twice: kind 2, then kind 1
+  string         session  = 3;             // BARE — no "mediasessions/" prefix
+  Empty          unknown_5 = 5;
+}
+
+message ClientIdentity {
+  ClientKind kind      = 1;                // { 1: 53 } constant
+  BuildNames names     = 2;
+  string     locale    = 4;                // "en"
+  RtcClient  rtc_client = 7;               // identical to the header's bytes
+}
+
+message ClientKind { uint64 value = 1; }   // 53
+message BuildNames {
+  string build    = 1;                     // "boq_hlane<…>"
+  string debug_id = 4;                     // the same value as x-goog-meeting-debugid
+}
+message Empty {}
+
+message StreamAnnouncements {
+  // ⚠ Announcements sit at DIFFERENT DEPTHS depending on which method carried
+  // them. Walk the tree; do not index. Treat as an announcement anything that
+  // names a device and lists SSRCs. Bound the recursion (~6 levels).
+  repeated ParticipantStream streams = 4;
+}
+
+message ParticipantStream {
+  string     label  = 4;                   // "audio", "video", or an SSRC as text
+  string     device = 6;                   // "spaces/<space>/devices/<n>"
+                                           // ⚠ must contain "/devices/"
+  SsrcList   ssrcs  = 8;                   // ⚠ reject entries with none
+}
+
+message SsrcList { repeated uint64 ssrc = 1; }   // varint here, unlike the allocation
+
+// Mute / camera. Observed, not reproduced.
+message DcrpcAction {
+  uint64      sequence = 1;
+  ActionBody  body     = 2;
+}
+
+message ActionBody { MuteRequest mute = 4; }
+
+message MuteRequest {
+  uint64 unknown_1 = 1;
+  uint64 unknown_2 = 2;
+  string session   = 3;                    // session-scoped, capture at join
+  string stream    = 4;                    // "audio"  ·  🧩 "video" for camera
+  string token     = 5;                    // ⚠ opaque, session-scoped, NO KNOWN
+                                           //   DERIVATION — the blocker for a
+                                           //   native action path
+  MuteState state  = 10;
+}
+
+message MuteState { uint64 state = 1; }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DATA CHANNEL — meet_messages  (outbound chat)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ⚠ Note the doubled wrapper. Captured bytes open `0a 31 0a 2f` — two nested
+// length-delimited wrappers before any content. Encoding one produces a message
+// two bytes short that parses cleanly and looks entirely correct.
+message ChatEnvelope   { ChatWrapper wrapper = 1; }
+message ChatWrapper    { ChatBody    body    = 1; }
+message ChatBody       { uint64 unknown_1 = 1; ChatLevelOne level_one = 3; }
+message ChatLevelOne   { ChatLevelTwo level_two = 1; }
+message ChatLevelTwo   { ChatContent  content   = 2; }
+message ChatContent {
+  uint64   sent_at_ms = 3;
+  ChatText text       = 5;
+  uint64   unknown_6  = 6;                 // 1
+}
+message ChatText { string text = 1; }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DATA CHANNEL — collections  (receive-only; zero sends in any capture)
+//
+// Self-describing REST-shaped resources, gzipped protobuf, 30–800 bytes:
+//   spaces/<id>                  the meeting
+//   spaces/<id>/devices/<n>      display name, avatar URL, device id
+//   spaces/<id>/messages/<id>    chat text with its sender
+//   spaces/<id>/handRaises/<n>   a raised hand
+//
+// ⚠ Meet pushes only what a client subscribes to. A client that opens no panels
+// receives ONE keepalive in 90 seconds; opening People, Chat and Captions takes
+// the same capture to 17 messages. The subscription message has not been
+// isolated — see ../docs/14-open-questions.md.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Placeholders for undecoded RPCs
+// ═════════════════════════════════════════════════════════════════════════════
+
+message CreateHandRaiseRequest    { string parent = 1; }
+message DeleteHandRaiseRequest    { string name   = 1; }
+message HandRaise                 { string name   = 1; }  // spaces/<id>/handRaises/<n>
+message GetUserRequest            { string name   = 1; }
+message User                      { bytes  opaque = 1; }
+message FetchCalendarEventRequest { bytes  opaque = 1; }
+message CalendarEvent             { bytes  opaque = 1; }  // title, times, invitees
+
+// ═════════════════════════════════════════════════════════════════════════════
+// The failure body — standard google.rpc.Status
+//
+// Read as a string it reduces to one sentence, the same for every cause. Read as
+// protobuf it can name the offending field. Walk the Any-wrapped details rather
+// than indexing a fixed path.
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// message Status {
+//   int32  code    = 1;
+//   string message = 2;
+//   repeated google.protobuf.Any details = 3;   // → BadRequest.FieldViolation
+// }

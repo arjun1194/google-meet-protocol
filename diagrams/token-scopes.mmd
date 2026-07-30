@@ -1,0 +1,10 @@
+%% Two token caches, not one. Merging them is refused as 400 invalid argument.
+%% Source: docs/02-authentication.md
+flowchart TB
+    BOOT["page bootstrap token"] --> S["<b>STATE cache</b>"]
+    BOOT --> M["<b>MEDIA cache</b>"]
+    S -->|rotates| S2["from X-Goog-Meeting-Token<br/>response headers"]
+    S2 --> SCALLS["SyncMeetingSpaceCollections<br/>UpdateMeetingDevice<br/>CreateHandRaise<br/>GetUser<br/>…everything else"]
+    M -->|"<b>never rotates</b>"| MCALLS["CreateMediaSession"]
+    style S fill:#e8f4fd,stroke:#409eff
+    style M fill:#fff4e5,stroke:#e6a23c,stroke-width:2px

@@ -1,0 +1,20 @@
+%% Connecting is not joining, and joining is not receiving.
+%% Source: docs/00-orientation.md
+stateDiagram-v2
+    direction LR
+    [*] --> Negotiated: CreateMediaSession returns 200
+    Negotiated --> Connected: ICE + DTLS complete
+    Connected --> Announced: UpdateMeetingDevice names<br/>the session as this device's
+    Announced --> Receiving: media-director configuration<br/>frame acknowledged
+    Receiving --> Attributed: dcrpc announces<br/>SSRC → device
+
+    note right of Connected
+        Looks finished.
+        Carries no media.
+        No error anywhere.
+    end note
+
+    note right of Attributed
+        Packets are now
+        attributable to people.
+    end note

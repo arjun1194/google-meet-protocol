@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Google Meet protocol — interactive map</title>
+<meta name="description" content="An observed specification of how a Google Meet client talks to Google: join sequence, annotated wire bytes, and the traps that fail silently.">
+<style>
+:root{
+  --bg:#fbfbfd; --panel:#fff; --ink:#14161a; --dim:#5b616e; --line:#e3e6ec;
+  --blue:#2f7fe0; --blue-bg:#e8f4fd;
+  --green:#2f9e52; --green-bg:#eaf6ec;
+  --purple:#8b5cf6; --purple-bg:#f4ecf7;
+  --amber:#d98614; --amber-bg:#fff4e5;
+  --red:#e0483d; --red-bg:#fdeaea;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1014; --panel:#171a20; --ink:#e8eaef; --dim:#9aa1ae; --line:#272c35;
+    --blue:#5fa8ff; --blue-bg:#13243a;
+    --green:#5fd07f; --green-bg:#132a1c;
+    --purple:#b591ff; --purple-bg:#231a38;
+    --amber:#f0a93c; --amber-bg:#33260f;
+    --red:#ff7a6e; --red-bg:#341715;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+a{color:var(--blue)}
+h1,h2,h3{line-height:1.2;letter-spacing:-.02em;margin:0}
+code{font-family:var(--mono);font-size:.9em}
+
+/* ---------- header ---------- */
+header{padding:64px 0 40px;border-bottom:1px solid var(--line)}
+header h1{font-size:clamp(30px,5vw,48px);font-weight:700}
+header .sub{color:var(--dim);font-size:18px;margin-top:14px;max-width:60ch}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.badge{font-size:12px;font-family:var(--mono);padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.badge.ok{background:var(--green-bg);border-color:transparent;color:var(--green)}
+.badge.warn{background:var(--amber-bg);border-color:transparent;color:var(--amber)}
+
+/* ---------- nav ---------- */
+nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;gap:4px;overflow-x:auto;padding-top:10px;padding-bottom:10px}
+nav a{color:var(--dim);text-decoration:none;font-size:13px;font-weight:500;padding:6px 12px;border-radius:8px;white-space:nowrap}
+nav a:hover{background:var(--panel);color:var(--ink)}
+
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+section > .wrap > h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:10px}
+.lead{font-size:26px;font-weight:650;letter-spacing:-.02em;margin-bottom:12px}
+.note{color:var(--dim);max-width:68ch;margin-bottom:26px}
+
+/* ---------- surprise cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card .n{font-family:var(--mono);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.08em}
+.card h3{font-size:16px;margin:8px 0 8px}
+.card p{margin:0;font-size:14px;color:var(--dim)}
+
+/* ---------- layer map ---------- */
+.stack{display:grid;gap:10px}
+.layer{border-radius:14px;padding:16px 18px;cursor:pointer;border:1.5px solid transparent;transition:.15s;
+       display:flex;align-items:center;gap:16px;text-align:left;width:100%;font:inherit;color:inherit}
+.layer:hover{transform:translateY(-1px)}
+.layer[aria-expanded="true"]{border-color:currentColor}
+.layer .idx{font-family:var(--mono);font-size:20px;font-weight:700;opacity:.5;min-width:24px}
+.layer .body{flex:1;min-width:0}
+.layer .t{font-weight:650;font-size:16px}
+.layer .d{font-size:13px;color:var(--dim);margin-top:2px}
+.layer .chev{opacity:.4;font-size:13px}
+.l1{background:var(--blue-bg);color:var(--blue)}
+.l2{background:var(--green-bg);color:var(--green)}
+.l3{background:var(--purple-bg);color:var(--purple)}
+.l0{background:var(--amber-bg);color:var(--amber)}
+.layer .t,.layer .idx{color:var(--ink)}
+.detail{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:-4px}
+.detail.open{display:block}
+.detail ul{margin:0;padding-left:20px;font-size:14.5px}
+.detail li{margin:6px 0}
+.detail li b{font-weight:650}
+
+/* ---------- stepper ---------- */
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.step{font:500 13px var(--sans);padding:7px 13px;border-radius:99px;border:1px solid var(--line);
+      background:var(--panel);color:var(--dim);cursor:pointer;transition:.15s}
+.step:hover{color:var(--ink)}
+.step.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.step.silent{border-color:var(--amber);color:var(--amber)}
+.step.silent.on{background:var(--amber);color:#fff;border-color:var(--amber)}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;min-height:220px}
+.stage h3{font-size:19px;margin-bottom:6px}
+.stage .where{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:14px}
+.stage p{font-size:15px;margin:0 0 12px}
+.stage pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:13px;
+           overflow-x:auto;font:12.5px/1.55 var(--mono);margin:0 0 12px}
+.flag{border-left:3px solid var(--amber);background:var(--amber-bg);padding:11px 14px;border-radius:0 8px 8px 0;font-size:14px}
+.flag b{color:var(--amber)}
+
+/* ---------- hex ---------- */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tab{font:500 13px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);
+     background:var(--panel);color:var(--dim);cursor:pointer}
+.tab.on{background:var(--purple-bg);color:var(--purple);border-color:var(--purple)}
+.hexgrid{display:grid;grid-template-columns:1fr 300px;gap:16px}
+@media (max-width:820px){.hexgrid{grid-template-columns:1fr}}
+.hexbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;overflow-x:auto}
+.hexline{font:13px/2 var(--mono);white-space:nowrap}
+.b{padding:2px 3px;border-radius:4px;cursor:default;transition:.1s}
+.b:hover{outline:1.5px solid var(--ink)}
+.b.on{background:var(--ink);color:var(--bg)}
+.legend{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;position:sticky;top:70px;align-self:start}
+.legend .lname{font:600 14px var(--sans);margin-bottom:4px}
+.legend .lpath{font:11px var(--mono);color:var(--dim);margin-bottom:10px}
+.legend .ldesc{font-size:13.5px;color:var(--dim)}
+.legend .lwarn{margin-top:12px;font-size:13px;background:var(--amber-bg);color:var(--amber);padding:9px 11px;border-radius:8px}
+.legend .hint{font-size:13px;color:var(--dim);font-style:italic}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.sw{font:11px var(--mono);padding:3px 8px;border-radius:6px;cursor:pointer}
+
+/* ---------- lookup ---------- */
+.search{width:100%;padding:13px 16px;border-radius:12px;border:1px solid var(--line);
+        background:var(--panel);color:var(--ink);font:15px var(--sans);margin-bottom:16px}
+.search:focus{outline:2px solid var(--blue);border-color:transparent}
+.rows{display:grid;gap:8px}
+.row{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+     display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:center;font-size:14px}
+@media (max-width:760px){.row{grid-template-columns:1fr}}
+.row .sym{font-family:var(--mono);font-size:12.5px;color:var(--red)}
+.row .cause{color:var(--dim)}
+.row a{font-size:12px;text-decoration:none;white-space:nowrap;font-family:var(--mono)}
+.empty{color:var(--dim);font-style:italic;padding:20px;text-align:center}
+
+/* ---------- footer ---------- */
+footer{padding:44px 0 70px;color:var(--dim);font-size:14px}
+footer p{max-width:70ch}
+.cta{display:inline-block;margin-top:16px;padding:11px 20px;background:var(--ink);color:var(--bg);
+     border-radius:10px;text-decoration:none;font-weight:600;font-size:14px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>The Google Meet protocol</h1>
+    <p class="sub">An observed specification of how a Meet client talks to Google —
+       recovered by instrumenting a real client, then rebuilding each message from
+       scratch until the server accepted it.</p>
+    <div class="badges">
+      <span class="badge">Chrome 150 · July 2026</span>
+      <span class="badge ok">✅ proven = a from-scratch client did it</span>
+      <span class="badge">👁 observed</span>
+      <span class="badge">🧩 inferred</span>
+      <span class="badge warn">unversioned · expect drift</span>
+    </div>
+  </div>
+</header>
+
+<nav><div class="wrap">
+  <a href="#surprises">Surprises</a>
+  <a href="#layers">Layers</a>
+  <a href="#join">Join sequence</a>
+  <a href="#bytes">Wire bytes</a>
+  <a href="#lookup">Failure lookup</a>
+</div></nav>
+
+<section id="surprises"><div class="wrap">
+  <h2>Start here</h2>
+  <p class="lead">Four things that surprise everyone</p>
+  <p class="note">Each of these contradicts what a reasonable engineer would assume, and
+     each one costs a day if you assume it.</p>
+  <div class="cards">
+    <div class="card">
+      <div class="n">01</div><h3>There is no WebSocket</h3>
+      <p>Signalling is gRPC-Web over ordinary HTTPS POST. Real-time push happens on
+         SCTP data channels inside the media session instead.</p>
+    </div>
+    <div class="card">
+      <div class="n">02</div><h3>SDP never crosses the wire</h3>
+      <p>A WebRTC service that never exchanges SDP. Fingerprints, ICE credentials and
+         codecs travel as structured protobuf; the client assembles a description locally.</p>
+    </div>
+    <div class="card">
+      <div class="n">03</div><h3>Channels are negotiated over HTTP</h3>
+      <p>Thirteen labels in the <code>CreateMediaSession</code> body — not an SDP
+         <code>m=application</code> section. The server then writes binary onto them with
+         no DCEP open message, ever.</p>
+    </div>
+    <div class="card">
+      <div class="n">04</div><h3>Connected ≠ receiving</h3>
+      <p>ICE completes, DTLS completes, and no media arrives until you send a
+         configuration frame on <code>media-director</code>. Nothing errors. Nothing logs.</p>
+    </div>
+  </div>
+</div></section>
+
+<section id="layers"><div class="wrap">
+  <h2>Structure</h2>
+  <p class="lead">Three protocols stacked on each other</p>
+  <p class="note">Each has its own encoding, its own authentication behaviour, and its own
+     failure vocabulary. Click a layer.</p>
+  <div class="stack" id="stack"></div>
+</div></section>
+
+<section id="join"><div class="wrap">
+  <h2>Sequence</h2>
+  <p class="lead">Nine steps from nothing to attributable audio</p>
+  <p class="note">Steps outlined in amber fail <em>silently</em> — skip one and you get a
+     healthy-looking session that carries nothing.</p>
+  <div class="stepper" id="stepper"></div>
+  <div class="stage" id="stage"></div>
+</div></section>
+
+<section id="bytes"><div class="wrap">
+  <h2>Ground truth</h2>
+  <p class="lead">Annotated wire bytes</p>
+  <p class="note">Captured frames. Hover or tap any byte to see what it is. Every tag, length
+     prefix and offset is exactly as captured; session identifiers are same-length synthetic
+     placeholders, so anything reading <code>EXAMPLE…</code> is substituted and the rest is verbatim.</p>
+  <div class="tabs" id="tabs"></div>
+  <div class="hexgrid">
+    <div class="hexbox"><div class="hexline" id="hex"></div></div>
+    <div class="legend" id="legend"></div>
+  </div>
+</div></section>
+
+<section id="lookup"><div class="wrap">
+  <h2>Debugging</h2>
+  <p class="lead">Symptom → cause</p>
+  <p class="note">Type an error message, a status code, or a symptom.</p>
+  <input class="search" id="q" placeholder="e.g. 400, silent, PayloadProtocolIdentifier, Disconnected…" autocomplete="off">
+  <div class="rows" id="rows"></div>
+</div></section>
+
+<footer><div class="wrap">
+  <p><strong>This page is a summary.</strong> The full specification — every field map,
+     the reconstructed <code>.proto</code>, the capture methodology, and the complete list of
+     what is still unknown — is in the repository.</p>
+  <p style="margin-top:14px">Automating Google Meet is against Google's Terms of Service, and
+     recording a meeting is regulated in most jurisdictions. If a supported path fits your
+     case, use the official
+     <a href="https://developers.google.com/meet/media-api">Meet Media API</a> instead.</p>
+  <a class="cta" href="https://github.com/arjun1194/google-meet-protocol">Read the full specification →</a>
+  <p style="margin-top:24px;font-size:13px">CC BY 4.0 · no credentials, no personal data,
+     no Google code in this repository.</p>
+</div></footer>
+
+<script>
+/* ============================ layers ============================ */
+const LAYERS = [
+  { cls:"l0", idx:"0", t:"Bootstrap — a browser, once per meeting",
+    d:"Three strings that cannot be derived any other way",
+    items:[
+      "<b>space id</b> — <code>spaces/&lt;id&gt;</code>, somewhere in ~2.3 MB of HTML. Also recoverable by decoding the <code>x-goog-meeting-identifier</code> header the pre-join screen sends.",
+      "<b>meeting token</b> — in the page's inline bootstrap data as <em>aligned base64</em>, which is why searching the HTML for it as plain text finds nothing.",
+      "<b>debug id</b> — the page's correlation id. Required on the media call; it was recorded as optional telemetry for a long time. It is not.",
+      "A plain fetch with cookies and a Chrome user-agent returns 200 and a document with <b>no space id in it</b>. Google serves different HTML without a full browser fingerprint."
+    ]},
+  { cls:"l1", idx:"1", t:"Control plane — gRPC-Web over HTTPS POST",
+    d:"Four RPCs that matter, and about six more",
+    items:[
+      "<code>POST https://meet.google.com/$rpc/&lt;Service&gt;/&lt;Method&gt;</code>",
+      "<b>Requests are gzip. Responses are base64.</b> The asymmetry is real — a captured response is entirely printable ASCII and looks nothing like protobuf until decoded once.",
+      "<code>SyncMeetingSpaceCollections</code> doubles as a <b>20-second long-poll</b> and is the main source of rotated meeting tokens.",
+      "Auth is <b>SAPISIDHASH</b>: three signatures over three cookies, computed over the origin — which must also be <em>sent</em>, or you get a 401 that points at the cookies.",
+      "<b>Two token caches, not one.</b> State calls rotate from response headers; the media call keeps the bootstrap value forever. Merging them is refused as <code>400 invalid argument</code> — identical to a malformed body."
+    ]},
+  { cls:"l2", idx:"2", t:"Media plane — ordinary WebRTC",
+    d:"Everything below signalling is off-the-shelf",
+    items:[
+      "<code>UDP/TLS/RTP/SAVPF</code>, sha-256 fingerprint, trickle ICE, BUNDLE across eight m-sections with <code>rtcp-mux</code>, and <b>no simulcast</b>.",
+      "Eight sections: 1 audio + 1 video outbound, 1 SCTP data, then <b>3 audio + 2 video inbound</b> — the same limit the official Media API documents.",
+      "<b>Remote participants arrive as separate tracks</b>, so who said what is known at capture time and needs no diarization. This is the single most valuable property of the protocol.",
+      "22 codecs under payload types that are <em>not</em> conventions — they end up in the RTP headers. A stack's defaults are the wrong list.",
+      "The answer's direction attribute is written from <b>Meet's</b> side: <code>a=sendonly</code>. Writing <code>recvonly</code> describes two peers each waiting for the other."
+    ]},
+  { cls:"l3", idx:"3", t:"Application layer — inside the media session",
+    d:"Nineteen data channels; almost everything interesting is here",
+    items:[
+      "<b><code>media-director</code></b> — a connected session carries nothing until you send a configuration frame here. The server is waiting to be told what you can accept.",
+      "<b><code>dcrpc</code></b> — sequenced RPC where <em>the payload's field number is the method</em>. It announces which SSRCs belong to which device: the association that turns a packet into a person.",
+      "<b><code>collections</code></b> — the roster, chat, and hand raises, as REST-shaped resources. Receive-only: zero sends in any capture.",
+      "<b><code>meet_messages</code></b> — outbound chat. Not HTTP; three separate investigations searched HTTP traffic and found nothing while messages were going out here.",
+      "<b>Meet pushes only what a client subscribes to.</b> A client with no panels open receives one keepalive in 90 seconds; opening three panels takes the same capture to 17 messages."
+    ]}
+];
+
+const stack = document.getElementById("stack");
+LAYERS.forEach((L,i) => {
+  const btn = document.createElement("button");
+  btn.className = "layer " + L.cls;
+  btn.setAttribute("aria-expanded","false");
+  btn.innerHTML = `<span class="idx">${L.idx}</span>
+    <span class="body"><span class="t">${L.t}</span><span class="d">${L.d}</span></span>
+    <span class="chev">▾</span>`;
+  const det = document.createElement("div");
+  det.className = "detail";
+  det.innerHTML = "<ul>" + L.items.map(x=>`<li>${x}</li>`).join("") + "</ul>";
+  btn.onclick = () => {
+    const open = det.classList.toggle("open");
+    btn.setAttribute("aria-expanded", open ? "true":"false");
+  };
+  stack.append(btn, det);
+});
+
+/* ============================ join stepper ============================ */
+const STEPS = [
+  { n:"Bootstrap", where:"GET meet.google.com/<code>", silent:false,
+    h:"Borrow three strings from a browser",
+    p:"The only remaining browser dependency. Open the meeting, capture the space id, the meeting token and the debug id, then close it — deliberately, before any native call, because a call that only works while the page is alive is indistinguishable from one that genuinely works.",
+    code:"spaces/<id>\n<epoch ms>;ADmEuv…\nboq_hlane_<random>",
+    flag:"Scan the <b>whole</b> document, not just script tags. A partial scan finds a stale space id from a recent-meetings list and stops the search." },
+
+  { n:"Authorize", where:"authorization header", silent:false,
+    h:"Three signatures, one origin",
+    p:"Google's cookie-derived signature scheme. No OAuth, no token exchange. The header carries one signature per cookie variant.",
+    code:'sign(c) = sha1_hex(f"{ts} {c} https://meet.google.com")\n\nSAPISIDHASH   <ts>_<sha1>   from SAPISID\nSAPISID1PHASH <ts>_<sha1>   from __Secure-1PAPISID\nSAPISID3PHASH <ts>_<sha1>   from __Secure-3PAPISID\n\n→ exactly 195 characters at a 10-digit timestamp',
+    flag:"<b>Origin must be sent, not just signed.</b> The server checks the two agree, and reports the mismatch as <i>missing required authentication credential</i> — which points at the cookies." },
+
+  { n:"Sync", where:"SyncMeetingSpaceCollections", silent:false,
+    h:"Prove the transport with the smallest call there is",
+    p:"Nineteen bytes on the wire. If your headers are wrong they are wrong here, with no body to blame. It also returns a fresher meeting token in a response header — adopt it into the state cache only.",
+    code:"1  string  \"spaces/<id>\"",
+    flag:"" },
+
+  { n:"Offer", where:"local WebRTC stack", silent:false,
+    h:"Build an offer with Meet's exact codec list",
+    p:"Your stack's defaults add H264, ulpfec and the 8 kHz telephony codecs and leave out red, AV1 and H265 under the numbers Meet assigns. Offering a codec Meet does not know is enough for it to refuse the whole session.",
+    code:"22 codecs · 12 primary + 10 secondary\n20 RTP header extensions · 5 audio, 15 video\nice-ufrag 4 chars · ice-pwd 24 chars",
+    flag:"" },
+
+  { n:"CreateMediaSession", where:"~2.9 KB out, ~5.2 KB back", silent:false,
+    h:"The one call that puts you in the meeting",
+    p:"Twenty captures, all 2893 bytes decompressed. Three preconditions each produce the identical, unhelpful 400 invalid argument: the media-scoped token, the debug id header, and a body whose nesting and session-id shape both match.",
+    code:"1.1        \"mediasessions/<28 chars>\"   ← 10 random + 11 CONSTANT bytes\n1.3.1.2/3  3                            ← setup role. Three, not one.\n1.3.2.3/4  ufrag / pwd                  ← fields 3 and 4, not 1 and 2\n1.3.3      22 codecs, field 3 = MEDIA KIND (not a clock rate)\n1.3.17     13 data channels             ← negotiated HERE, not in SDP",
+    flag:"A fully random session id of the right length and alphabet is refused <b>exactly as loudly</b> as a malformed one. Eighteen captures agree on its last eleven bytes." },
+
+  { n:"Connect", where:"ICE + DTLS", silent:false,
+    h:"Apply the answer and connect",
+    p:"Four candidates and 22 codecs come back. The answer names codecs by payload type only — clock rate, channels and fmtp must be carried over from your own offer, or every video codec ends up described at the audio clock rate.",
+    code:"signaling state → stable\npeer connection  → connected\n\nmedia arriving   → none",
+    flag:"This is where most implementations stop and conclude they succeeded." },
+
+  { n:"Claim channels", where:"SCTP stream ids", silent:true,
+    h:"Claim every stream id up front",
+    p:"Meet's channels are pre-negotiated: it assigns each an SCTP stream id in the response and then writes binary straight onto it with no DCEP open message. A client waiting to be told about a channel is never told.",
+    code:"2.12  { 1: \"dcrpc\",          3: 113 }\n      { 1: \"reactions\",      3: 115 }\n      { 1: \"media-director\", 3: 131 }\n      { 1: \"meet_messages\",  3: 137 }\n\n→ odd ids only, 111–159, DIFFERENT EVERY SESSION",
+    flag:"Poll <b>every</b> claimed channel and keep <b>every</b> handle. An unread channel has its receiver closed underneath it, and the stack then reports <code>Disconnected</code> for deliveries on every other channel too." },
+
+  { n:"media-director", where:"data channel", silent:true,
+    h:"Ask to be sent something",
+    p:"The client opens this conversation. Until the configuration frame goes out, the server allocates nothing — and re-sends each allocation until you acknowledge it by name and version.",
+    code:"→ {1:{1: seq, 2:{1:{1:1280,2:720}, 3:{1:1920,2:1080}}}}\n← {1:{1:\"video\", 2: version, 3:{1:{1: [streams]}}}}\n→ {2:{1:\"video\", 2: version, 3: 1}}",
+    flag:"The SSRC inside an allocation is a <b>fixed32</b> — the only one in this protocol. Read as a varint it yields a plausible number matching no arriving packet, and the session looks silently empty while RTP flows perfectly." },
+
+  { n:"Announce + dcrpc", where:"HTTP + data channel", silent:true,
+    h:"Say the session is yours, then learn who is who",
+    p:"UpdateMeetingDevice tells Meet the session belongs to a participating device — in a captured join it lands immediately before the first allocation. Then dcrpc names the SSRCs of everyone else against their device.",
+    code:"UpdateMeetingDevice\n  1.22  \"<session id, BARE>\"   ← no mediasessions/ prefix here\n  2     [cloud_session_id, join_state,\n         media_capture_type, participation_mode]\n\ndcrpc announcement\n  { 4: \"video\", 6: \"spaces/<sp>/devices/98\", 8: {1: [ssrc…]} }",
+    flag:"Announcements sit at <b>different depths</b> depending on which method carried them. Walk the tree; do not index a fixed path." }
+];
+
+const stepper = document.getElementById("stepper"), stage = document.getElementById("stage");
+STEPS.forEach((S,i) => {
+  const b = document.createElement("button");
+  b.className = "step" + (S.silent ? " silent":"");
+  b.textContent = (i+1) + ". " + S.n;
+  b.onclick = () => show(i);
+  stepper.append(b);
+});
+function show(i){
+  [...stepper.children].forEach((b,j)=>b.classList.toggle("on", i===j));
+  const S = STEPS[i];
+  stage.innerHTML =
+    `<h3>${S.h}</h3><div class="where">${S.where.replace(/</g,"&lt;")}</div>
+     <p>${S.p}</p>
+     ${S.code ? `<pre>${S.code.replace(/</g,"&lt;")}</pre>` : ""}
+     ${S.flag ? `<div class="flag">${S.flag}</div>` : ""}`;
+}
+show(0);
+
+/* ============================ hex explorer ============================ */
+/* Each sample: bytes as hex string + spans [start, len, name, path, desc, warn] */
+const SAMPLES = [
+{ name:"media-director · configuration",
+  note:"Without this frame, a connected session receives nothing.",
+  hex:"0a 16 0a 14 08 01 12 10 0a 06 08 80 0a 10 d0 05 1a 06 08 80 0f 10 b8 08",
+  spans:[
+    [0,2,"frame wrapper","frame.1","Field 1, 22 bytes — a plain (uncompressed) frame. Field 2 would carry gzip.","", "blue"],
+    [2,2,"request","payload.1","Field 1 of the payload: a request. Field 2 would be an acknowledgement.","","blue"],
+    [4,2,"sequence","1","Sequence number = 1.","","green"],
+    [6,2,"sizes block","2","The accepted resolutions, 16 bytes.","","purple"],
+    [8,2,"size A header","2.1","Six bytes describing the first resolution.","","purple"],
+    [10,3,"width 1280","2.1.1","0x0a80 = 1280.","","amber"],
+    [13,3,"height 720","2.1.2","0x02d0 = 720.","","amber"],
+    [16,2,"size B header","2.3","⚠ Field <b>3</b>, not 2. Field 2 is unused.","The second size sits at field 3. Writing it at field 2 encodes cleanly and describes something else.","purple"],
+    [18,3,"width 1920","2.3.1","0x0f80 = 1920.","","amber"],
+    [21,3,"height 1080","2.3.2","0x0438 = 1080.","","amber"]
+  ]},
+
+{ name:"media-director · allocation",
+  note:"What Meet has decided to send you. Two streams, 960×540, no simulcast.",
+  hex:"0a 55 0a 53 0a 05 76 69 64 65 6f 10 02 1a 48 0a 46 0a 21 0a 1d 0a 05 0d b9 5b 0c e6 12 06 08 c0 07 10 9c 04 18 1e 20 c0 84 3d 2a 04 4c 31 54 33 30 62 10 02 0a 21 0a 1d 0a 05 0d 1f 15 7b 5c 12 06 08 c0 07 10 9c 04 18 1e 20 e0 c6 5b 2a 04 4c 31 54 32 30 60 10 02",
+  spans:[
+    [0,2,"frame wrapper","frame.1","Plain frame, 85 bytes.","","blue"],
+    [2,2,"request","payload.1","","","blue"],
+    [4,7,"name \"video\"","1","The allocation's name. You acknowledge by this name plus the version.","","green"],
+    [11,2,"version 2","2","Increments as participants join, leave, or change what they send.","","green"],
+    [13,2,"streams holder","3","72 bytes.","","purple"],
+    [15,2,"group","3.1","70 bytes.","","purple"],
+    [17,2,"stream #1","3.1.1","33 bytes.","","purple"],
+    [19,2,"description","1","29 bytes.","","purple"],
+    [21,2,"ssrc holder","1.1","","","purple"],
+    [23,5,"SSRC = 3859569593","1.1.1","⚠ <b>fixed32</b> — tag 0x0d is field 1, wire type 5. Little-endian: b9 5b 0c e6 → 3859569593.","THE trap. Read as a varint this yields a plausible number that matches no arriving packet, so every packet becomes unattributable and the session looks silently empty.","red"],
+    [28,2,"size","1.2","","","purple"],
+    [30,3,"width 960","1.2.1","","","amber"],
+    [33,3,"height 540","1.2.2","","","amber"],
+    [36,2,"fps 30","1.3","","","amber"],
+    [38,4,"bitrate 1000000","1.4","","","amber"],
+    [42,6,"scalability L1T3","1.5","One spatial layer, three temporal ones. No simulcast in any observed allocation.","","green"],
+    [48,2,"payload type 98","1.6","VP9, per Meet's own codec assignment.","","green"],
+    [50,2,"trailer","2","Constant 2.","","purple"],
+    [52,2,"stream #2","3.1.1","The second allocated stream, same shape.","","purple"],
+    [54,2,"description","1","","","purple"],
+    [56,2,"ssrc holder","1.1","","","purple"],
+    [58,5,"SSRC = 1551570207","1.1.1","fixed32 again: 1f 15 7b 5c → 1551570207.","","red"],
+    [63,8,"960 × 540","1.2","","","amber"],
+    [71,2,"fps 30","1.3","","","amber"],
+    [73,4,"bitrate 1500000","1.4","","","amber"],
+    [77,6,"scalability L1T2","1.5","Two temporal layers on this one.","","green"],
+    [83,2,"payload type 96","1.6","VP8.","","green"],
+    [85,2,"trailer","2","","","purple"]
+  ]},
+
+{ name:"dcrpc · open request",
+  note:"The first frame of a real join. Two traps visible in one message.",
+  hex:"0a 6b 08 01 1a 67 0a 43 0a 02 08 35 12 2a 0a 11 62 6f 71 5f 68 6c 61 6e 65 45 58 41 4d 50 4c 45 30 22 15 62 6f 71 5f 68 6c 61 6e 65 5f 45 58 41 4d 50 4c 45 30 30 30 30 22 02 65 6e 3a 0d 08 01 10 aa 03 18 01 20 01 28 08 38 01 10 02 1a 1c 45 58 41 4d 50 4c 45 73 65 73 73 69 6f 6e 6f 4b 41 41 69 4b 59 69 67 43 49 41 51 51 2a 00",
+  spans:[
+    [0,2,"frame wrapper","frame.1","Plain frame, 107 bytes.","","blue"],
+    [2,2,"sequence 1","1","Replies are matched to requests by this and nothing else.","","green"],
+    [4,2,"method: open","3","⚠ <b>The field number is the method.</b> Nothing names a method in words anywhere on this channel.","Dispatch on field number, not name. Unknown numbers will appear as Meet changes — log them as data, not errors.","red"],
+    [6,2,"client identity","3.1","67 bytes.","","purple"],
+    [8,4,"client kind 53","3.1.1.1","Constant in every captured session.","","green"],
+    [12,2,"names block","3.1.2","","","purple"],
+    [14,19,"build id","3.1.2.1","The page's build identifier, e.g. boq_hlaneEXAMPLE0.","","amber"],
+    [33,23,"debug id","3.1.2.4","⚠ The same value as the <code>x-goog-meeting-debugid</code> header — which is <b>required</b> on the media call.","","amber"],
+    [56,4,"locale \"en\"","3.1.4","","","green"],
+    [60,2,"client descriptor","3.1.7","13 bytes.","","purple"],
+    [62,13,"{1:1, 2:426, 3:1, 4:1, 5:8, 7:1}","3.1.7.*","⚠ <b>Byte-identical to the <code>x-goog-meeting-rtcclient</code> header</b> (CAEQqgMYASABKAg4AQ==).","The header and the body carry the same bytes. Getting one right and the other wrong is possible and produces no distinct symptom.","red"],
+    [75,2,"kind 2","3.2","Sent twice per join: kind 2, then kind 1. What they distinguish is unread; both are sent because one alone has never been seen to work.","","green"],
+    [77,2,"session id header","3.3","28 bytes follow.","","purple"],
+    [79,28,"session id, BARE","3.3","⚠ <b>No <code>mediasessions/</code> prefix here</b>, where CreateMediaSession uses one. Ends <code>oKAAiKYigCIAQQ</code> — the base64 of the 11-byte constant tail every session id shares.","Sending the prefixed form names a session Meet does not recognise.","red"],
+    [107,2,"empty","3.5","{}","","purple"]
+  ]},
+
+{ name:"meet_messages · chat",
+  note:"51 bytes for a 26-character message. Note how it opens.",
+  hex:"0a 31 0a 2f 08 01 1a 2b 0a 29 12 27 18 aa 96 a6 84 fa 33 2a 1c 0a 1a 70 72 6f 62 65 20 6d 65 73 73 61 67 65 20 66 72 6f 6d 20 74 68 65 20 62 6f 74 30 01",
+  spans:[
+    [0,2,"wrapper 1","1","⚠ <b>The doubled field 1.</b> The bytes open <code>0a 31 0a 2f</code> — two nested length-delimited wrappers before any content.","Encoding only one produces a message two bytes short that parses cleanly and looks entirely correct.","red"],
+    [2,2,"wrapper 2","1.1","The second wrapper.","","red"],
+    [4,2,"flag 1","1.1.1","","","green"],
+    [6,2,"body","1.1.3","43 bytes.","","purple"],
+    [8,2,"level one","…3.1","","","purple"],
+    [10,2,"level two","…3.1.2","","","purple"],
+    [12,7,"epoch ms","…2.3","1785104796458. Used for ordering. Pass it in rather than reading a clock, so an encoder is testable.","","amber"],
+    [19,2,"text holder","…2.5","","","purple"],
+    [21,2,"text length","…2.5.1","26 bytes follow.","","purple"],
+    [23,26,"\"probe message from the bot\"","…2.5.1","The message, verbatim UTF-8.","","green"],
+    [49,2,"flag 1","…2.6","","","green"]
+  ]}
+];
+
+const COLORS = { blue:"--blue", green:"--green", purple:"--purple", amber:"--amber", red:"--red" };
+const tabs=document.getElementById("tabs"), hexEl=document.getElementById("hex"), legEl=document.getElementById("legend");
+let cur=0;
+
+SAMPLES.forEach((S,i)=>{
+  const b=document.createElement("button");
+  b.className="tab"; b.textContent=S.name;
+  b.onclick=()=>{cur=i;renderHex();};
+  tabs.append(b);
+});
+
+function tint(key,alpha){
+  const c=getComputedStyle(document.documentElement).getPropertyValue(COLORS[key]||"--dim").trim();
+  return `color-mix(in srgb, ${c} ${alpha}%, transparent)`;
+}
+
+function renderHex(){
+  [...tabs.children].forEach((b,j)=>b.classList.toggle("on", j===cur));
+  const S=SAMPLES[cur];
+  const bytes=S.hex.trim().split(/\s+/);
+  // map byte index → span
+  const owner=new Array(bytes.length).fill(-1);
+  S.spans.forEach((sp,si)=>{ for(let k=sp[0];k<sp[0]+sp[1] && k<bytes.length;k++) owner[k]=si; });
+
+  hexEl.innerHTML = bytes.map((bt,k)=>{
+    const si=owner[k];
+    const col = si>=0 ? (S.spans[si][6]||"dim") : "dim";
+    const bgc = si>=0 ? tint(col,16) : "transparent";
+    const brk = (k%16===15) ? "<br>" : "";
+    return `<span class="b" data-s="${si}" style="background:${bgc}">${bt}</span> ${brk}`;
+  }).join("");
+
+  legEl.innerHTML = `<div class="lname">${S.name}</div>
+    <div class="lpath">${bytes.length} bytes · structure verbatim, ids substituted</div>
+    <div class="ldesc">${S.note}</div>
+    <div class="hint" style="margin-top:14px">Hover a byte to inspect it.</div>
+    <div class="swatches">${S.spans.filter(sp=>sp[6]==="red").length?`<span class="sw" style="background:${tint("red",18)};color:var(--red)">${S.spans.filter(sp=>sp[6]==="red").length} traps</span>`:""}</div>`;
+
+  hexEl.querySelectorAll(".b").forEach(el=>{
+    const si=+el.dataset.s;
+    const act=()=>{
+      if(si<0) return;
+      const sp=S.spans[si];
+      hexEl.querySelectorAll(".b").forEach(x=>x.classList.toggle("on", +x.dataset.s===si));
+      legEl.innerHTML = `<div class="lname">${sp[2]}</div>
+        <div class="lpath">field ${sp[3]} · offset ${sp[0]} · ${sp[1]} byte${sp[1]>1?"s":""}</div>
+        <div class="ldesc">${sp[4]||"—"}</div>
+        ${sp[5]?`<div class="lwarn">${sp[5]}</div>`:""}`;
+    };
+    el.addEventListener("mouseenter",act);
+    el.addEventListener("click",act);
+  });
+}
+renderHex();
+
+/* ============================ failure lookup ============================ */
+const FAILURES=[
+ ["400 This RPC requires a meeting token but nothing was provided","The x-goog-meeting-token header is absent","docs/02-authentication.md"],
+ ["400 Request contains an invalid argument (media call)","Wrong token scope — the rotated state token was used instead of the pinned bootstrap media token","docs/02-authentication.md"],
+ ["400 Request contains an invalid argument (still)","x-goog-meeting-debugid missing — it was recorded as optional telemetry and it is not","docs/05-create-media-session.md"],
+ ["400 Request contains an invalid argument (body)","Session id lacks the 11-byte constant tail, or a codec is missing field 3 (media kind), or codecs sit at 1.3 instead of 1.3.3","docs/05-create-media-session.md"],
+ ["401 missing required authentication credential","Origin header not sent. The signature is computed over it and the server checks the two agree","docs/02-authentication.md"],
+ ["403 The caller does not have permission","You named another participant's device. Try each in turn — the search is self-correcting","docs/03-join-sequence.md"],
+ ["404 on an RPC","Wrong service prefix, not a bad body. Use this to verify an inferred service name in one round trip","docs/04-rpc-catalogue.md"],
+ ["Page fetch returns 200 with no space id","Incomplete browser fingerprint — cookies and a user-agent are not enough","docs/12-failure-modes.md"],
+ ["ICE connected but no media ever arrives","No media-director configuration frame was sent. The server allocates nothing until asked","docs/07-media-director.md"],
+ ["Unknown PayloadProtocolIdentifier 53","An SCTP stream id was never claimed. Meet writes binary with no DCEP open message","docs/06-data-channels.md"],
+ ["data channel not existed (a warning, not an error)","Sent before the SCTP association existed — and it cost the one frame that makes Meet allocate anything","docs/06-data-channels.md"],
+ ["Everything reports Disconnected at once, seconds in","A claimed channel was never polled, or its handle was dropped — it takes the others down with it","docs/06-data-channels.md"],
+ ["SSRCs decode to plausible numbers matching no packet","SSRC read as a varint. It is a fixed32 — the only one in this protocol","docs/07-media-director.md"],
+ ["Connected, RTP arriving, nothing decrypts","DTLS role — unresolved. passive reaches Connected; active never leaves Connecting","docs/10-media-plane.md"],
+ ["Clean negotiation, no media, answer looks right","Direction attribute written from your own point of view. The answer is Meet's: a=sendonly","docs/10-media-plane.md"],
+ ["Every video codec described at the audio clock rate","The answer names codecs by payload type only — carry the details over from your offer","docs/10-media-plane.md"],
+ ["A data channel looks completely empty","Meet pushes only what a client subscribes to — or your instrumentation patched instances, not prototypes","docs/06-data-channels.md"],
+ ["Chat missing from every capture","18 of 19 channels invisible: minified Closure calls prototype methods directly, past an instance shadow","docs/12-failure-modes.md"],
+ ["A test passes while the encoder is wrong","The test was written from the code. Write protocol tests from the capture, and pin bytes not lengths","docs/12-failure-modes.md"],
+ ["Body corrections seem to do nothing","Two things changed between runs. The token was right while the body was wrong, then the reverse","docs/12-failure-modes.md"]
+];
+/* Absolute, so the links work both from the repo and from Pages, where a
+   relative .md link would serve raw Markdown instead of rendering it. */
+const DOCS="https://github.com/arjun1194/google-meet-protocol/blob/main/";
+const rows=document.getElementById("rows"), q=document.getElementById("q");
+function draw(f=""){
+  const t=f.toLowerCase().trim();
+  const hits=FAILURES.filter(r=>!t || (r[0]+" "+r[1]).toLowerCase().includes(t));
+  rows.innerHTML = hits.length
+    ? hits.map(r=>`<div class="row"><div class="sym">${r[0]}</div>
+        <div class="cause">${r[1]}</div>
+        <a href="${DOCS}${r[2]}">${r[2].split("/")[1].replace(".md","")} →</a></div>`).join("")
+    : `<div class="empty">No match. The full list of traps is in docs/12-failure-modes.md — and if you found a new one, it belongs there.</div>`;
+}
+q.addEventListener("input",e=>draw(e.target.value));
+draw();
+</script>
+</body>
+</html>

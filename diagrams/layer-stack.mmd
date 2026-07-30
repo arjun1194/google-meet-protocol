@@ -1,0 +1,26 @@
+%% Three protocols stacked, each with its own encoding and failure vocabulary.
+%% Source: docs/00-orientation.md
+flowchart TB
+    subgraph L3["Application layer — inside the media session"]
+        direction LR
+        A1["media-director<br/>stream allocation"]
+        A2["dcrpc<br/>sequenced RPC"]
+        A3["collections<br/>resources"]
+        A4["meet_messages<br/>chat"]
+        A5["+ 15 more"]
+    end
+    subgraph L2["Media layer — ordinary WebRTC"]
+        direction LR
+        B1["ICE"] --> B2["DTLS"] --> B3["SRTP + SCTP"]
+    end
+    subgraph L1["Control layer — gRPC-Web over HTTPS"]
+        direction LR
+        C1["4 RPCs that matter"]
+        C2["~6 more"]
+        C3["telemetry, ignorable"]
+    end
+    L1 -->|"CreateMediaSession<br/>returns the parameters"| L2
+    L2 -->|"SCTP carries them"| L3
+    style L1 fill:#e8f4fd,stroke:#409eff
+    style L2 fill:#eaf6ec,stroke:#67c23a
+    style L3 fill:#f4ecf7,stroke:#9b59b6

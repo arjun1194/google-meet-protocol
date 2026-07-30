@@ -1,0 +1,11 @@
+# Captures contain live session cookies, meeting tokens, and the names,
+# avatars and speech of people who did not consent to being recorded.
+# Nothing derived from a capture belongs here until it is reduced to structure.
+captures/
+*.har
+*.pcap
+*.pcapng
+.meet-bot/
+
+.DS_Store
+node_modules/

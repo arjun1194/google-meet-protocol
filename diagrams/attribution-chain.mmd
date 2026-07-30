@@ -1,0 +1,10 @@
+%% How an RTP packet becomes a person.
+%% Source: docs/08-dcrpc.md
+flowchart LR
+    P["RTP packet<br/>ssrc = 2299048008"] --> Q{"?"}
+    Q -->|"without dcrpc"| N["a number"]
+    Q -->|"with dcrpc"| D["spaces/…/devices/98"]
+    D -->|"collections roster"| NAME["a display name"]
+    NAME --> PERSON(["a person"])
+    style N fill:#fdeaea,stroke:#f56c6c
+    style PERSON fill:#eaf6ec,stroke:#67c23a,stroke-width:2px

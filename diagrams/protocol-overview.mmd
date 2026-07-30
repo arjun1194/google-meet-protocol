@@ -1,0 +1,44 @@
+%% The whole protocol in one picture.
+%% Source: docs/00-orientation.md
+flowchart TB
+    subgraph BOOT["① Bootstrap — a browser, once per meeting"]
+        PAGE["GET meet.google.com/&lt;code&gt;<br/><i>~2.3 MB of HTML</i>"]
+        PAGE --> SPACE["space id · spaces/&lt;id&gt;"]
+        PAGE --> TOK["meeting token · epoch;opaque"]
+        PAGE --> DBG["debug id"]
+    end
+
+    subgraph CTRL["② Control plane — gRPC-Web over plain HTTPS POST"]
+        direction LR
+        SYNC["SyncMeetingSpaceCollections<br/><i>state + 20s long-poll</i>"]
+        UMD["UpdateMeetingDevice<br/><i>device state, field-masked</i>"]
+        CMS["CreateMediaSession<br/><i>DTLS · ICE · codecs · channels</i>"]
+        ISC["IssueIceServerConfig<br/><i>STUN / TURN</i>"]
+    end
+
+    subgraph MEDIA["③ Media plane — one bundled DTLS transport"]
+        direction LR
+        SCTP["SCTP<br/>19 data channels"]
+        SRTP["SRTP<br/>one track per participant"]
+    end
+
+    subgraph CHAN["④ The channels that matter"]
+        direction LR
+        MD["media-director<br/><i>ask for streams</i>"]
+        DCRPC["dcrpc<br/><i>SSRC → device</i>"]
+        COLL["collections<br/><i>roster · chat · hands</i>"]
+        MSG["meet_messages<br/><i>send chat</i>"]
+    end
+
+    SPACE --> CTRL
+    TOK --> CTRL
+    DBG --> CMS
+    CMS --> MEDIA
+    SCTP --> CHAN
+    MD -.->|"allocation"| SRTP
+    DCRPC -.->|"attribution"| SRTP
+
+    style BOOT fill:#fff4e5,stroke:#e6a23c
+    style CTRL fill:#e8f4fd,stroke:#409eff
+    style MEDIA fill:#eaf6ec,stroke:#67c23a
+    style CHAN fill:#f4ecf7,stroke:#9b59b6

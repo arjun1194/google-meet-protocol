@@ -1,0 +1,17 @@
+%% Diagnosing 400 invalid argument on CreateMediaSession, cheapest check first.
+%% Source: docs/05-create-media-session.md
+flowchart TD
+    E(["400 invalid argument"]) --> T{"Media-scoped<br/>token?"}
+    T -->|"no"| TF["Use the bootstrap token,<br/>not the rotated state one"]
+    T -->|"yes"| D{"x-goog-meeting-debugid<br/>present?"}
+    D -->|"no"| DF["Add it — from the browser's<br/>own CreateMediaSession"]
+    D -->|"yes"| S{"Session id ends<br/>oKAAiKYigCIAQQ?"}
+    S -->|"no"| SF["Append the 11-byte<br/>constant tail"]
+    S -->|"yes"| K{"Every codec<br/>carries field 3?"}
+    K -->|"no"| KF["Add the media kind:<br/>1 audio, 2 video"]
+    K -->|"yes"| N{"Codecs at 1.3.3,<br/>not 1.3?"}
+    N -->|"no"| NF["Nest them inside<br/>the transport block"]
+    N -->|"yes"| R["Read the FieldViolation<br/>details in the Status body"]
+    style TF fill:#fdeaea,stroke:#f56c6c
+    style DF fill:#fdeaea,stroke:#f56c6c
+    style R fill:#e8f4fd,stroke:#409eff

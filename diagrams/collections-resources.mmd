@@ -1,0 +1,23 @@
+%% The collections resource model — self-describing and REST-shaped.
+%% Source: docs/09-collections-and-actions.md
+erDiagram
+    SPACE ||--o{ DEVICE : has
+    SPACE ||--o{ MESSAGE : has
+    SPACE ||--o{ HANDRAISE : has
+    SPACE {
+        string name "spaces/[id]"
+    }
+    DEVICE {
+        string name "spaces/[id]/devices/[n]"
+        string display_name
+        string avatar_url
+        string device_id
+    }
+    MESSAGE {
+        string name "spaces/[id]/messages/[id]"
+        string text
+        string sender
+    }
+    HANDRAISE {
+        string name "spaces/[id]/handRaises/[n]"
+    }

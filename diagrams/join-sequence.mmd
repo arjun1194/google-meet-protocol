@@ -1,0 +1,51 @@
+%% The full join, from browser bootstrap to attributable RTP.
+%% Source: docs/03-join-sequence.md
+sequenceDiagram
+    autonumber
+    participant B as Browser<br/>(once)
+    participant N as Native client
+    participant G as Google
+    participant P as Peer transport
+
+    rect rgb(255, 244, 229)
+    Note over B,G: Step 0 — bootstrap. The only browser dependency.
+    B->>G: GET /&lt;meeting-code&gt;
+    G-->>B: 2.3 MB HTML
+    Note right of B: extract: spaces/&lt;id&gt;<br/>meeting token (aligned base64)<br/>debug id
+    B->>B: close
+    end
+
+    rect rgb(232, 244, 253)
+    Note over N,G: Step 1 — prove the transport
+    N->>G: SyncMeetingSpaceCollections { 1: "spaces/&lt;id&gt;" }
+    G-->>N: meeting state
+    G-->>N: X-Goog-Meeting-Token: &lt;newer&gt;
+    Note right of N: rotate STATE cache only
+    end
+
+    rect rgb(232, 244, 253)
+    Note over N,G: Step 2 — device state
+    N->>G: UpdateMeetingDevice + field mask
+    G-->>N: 200
+    end
+
+    rect rgb(234, 246, 236)
+    Note over N,P: Step 3 — negotiate media
+    N->>G: CreateMediaSession (~2.9 KB)
+    Note right of N: MEDIA token · debug id required
+    G-->>N: ~5.2 KB: answer, 4 candidates, 22 codecs,<br/>channel → SCTP stream table
+    N->>P: ICE, then DTLS as client
+    P-->>N: connected
+    end
+
+    rect rgb(244, 236, 247)
+    Note over N,P: Step 4 — the part that is not in the HTTP API
+    N->>P: claim all pre-negotiated stream ids
+    N->>P: media-director: configuration
+    P-->>N: media-director: allocation
+    N->>P: media-director: acknowledgement
+    N->>G: UpdateMeetingDevice: cloud_session_id
+    N->>P: dcrpc: open (kind 2, then kind 1)
+    P-->>N: dcrpc: SSRC → device announcements
+    P-->>N: SRTP packets
+    end

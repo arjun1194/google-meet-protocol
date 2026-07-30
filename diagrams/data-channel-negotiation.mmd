@@ -1,0 +1,12 @@
+%% Channels are negotiated over HTTP, then written to with no DCEP open message.
+%% Source: docs/06-data-channels.md
+sequenceDiagram
+    participant C as Client
+    participant G as Google
+    Note over C,G: Negotiation happens over HTTP, not SCTP
+    C->>G: CreateMediaSession · 1.3.17 × 13 { label, … }
+    G-->>C: response · 2.12 × N { label, stream id }
+    Note over C: claim EVERY id now,<br/>as a pre-negotiated channel
+    Note over C,G: DTLS + SCTP association comes up
+    G->>C: raw binary on stream 131
+    Note over C: if the id was not claimed:<br/>"Unknown PayloadProtocolIdentifier 53"

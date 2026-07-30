@@ -1,0 +1,17 @@
+%% What unblocks what. Two nodes unblock most of the graph.
+%% Source: docs/11-capabilities.md
+flowchart TD
+    A["dcrpc stream registration"] --> B["stream allocation"]
+    B --> C["receive per-participant audio natively"]
+    B --> D["receive video natively"]
+    A --> E["mute / camera actions"]
+    F["session-scoped dcrpc token"] --> E
+    G["subscription message"] --> H["roster + chat + presence"]
+    G -.->|"possibly"| I["captions"]
+    C --> J["transcription"]
+    I -.->|"if text rides the channel"| J
+    K["a meeting the account owns"] --> L["host controls"]
+    M["browser fingerprint on the page fetch"] --> N["fully browserless join"]
+    style A fill:#fff4e5,stroke:#e6a23c,stroke-width:2px
+    style G fill:#fff4e5,stroke:#e6a23c,stroke-width:2px
+    style J fill:#eaf6ec,stroke:#67c23a

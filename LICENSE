@@ -1,0 +1,60 @@
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Copyright (c) 2026 the contributors to this repository.
+
+This work — the documentation, diagrams, reference tables, reconstructed schema,
+and interactive page in this repository — is licensed under the Creative Commons
+Attribution 4.0 International License.
+
+Full licence text:
+    https://creativecommons.org/licenses/by/4.0/legalcode
+
+Human-readable summary (not a substitute for the licence):
+    https://creativecommons.org/licenses/by/4.0/
+
+You are free to:
+
+  Share  — copy and redistribute the material in any medium or format
+  Adapt  — remix, transform, and build upon the material
+           for any purpose, including commercially.
+
+Under the following terms:
+
+  Attribution — You must give appropriate credit, provide a link to the
+  licence, and indicate if changes were made. You may do so in any reasonable
+  manner, but not in any way that suggests the licensor endorses you or your
+  use.
+
+  No additional restrictions — You may not apply legal terms or technological
+  measures that legally restrict others from doing anything the licence
+  permits.
+
+--------------------------------------------------------------------------------
+
+NOT COVERED BY THIS LICENCE
+
+"Google", "Google Meet", "Chrome", and related marks are trademarks of Google
+LLC. This repository is not affiliated with, authorised by, endorsed by, or
+sponsored by Google.
+
+No Google source code, binary, or copyrighted asset is reproduced here. The
+contents are original descriptions of behaviour observed on the network by the
+authors while participating in meetings using their own accounts.
+
+Protocol facts — field numbers, wire encodings, header names — are not
+copyrightable subject matter. The expression of those facts in this repository
+is, and that expression is what this licence covers.
+
+--------------------------------------------------------------------------------
+
+NO WARRANTY
+
+The material is provided "as is", without warranty of any kind. It documents a
+proprietary, unversioned protocol that its operator may change without notice,
+and parts of it are explicitly marked as inference rather than fact.
+
+Using it may violate Google's Terms of Service, and may get an account
+suspended. Recording, transcribing, or storing a meeting's contents is regulated
+in many jurisdictions and generally requires the consent of the participants.
+Determining what you are permitted to do is your responsibility, not the
+authors'.

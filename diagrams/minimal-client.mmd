@@ -1,0 +1,19 @@
+%% The shortest honest path from nothing to attributable audio.
+%% Amber steps have no error signal when skipped.
+%% Source: docs/00-orientation.md
+flowchart TD
+    S0["Sign a browser profile into Google"] --> S1
+    S1["Open the meeting page once<br/>capture: space id · meeting token · debug id"] --> S2
+    S2["Derive the authorization header<br/>SAPISIDHASH over three cookies"] --> S3
+    S3["SyncMeetingSpaceCollections<br/><i>proves the transport works</i>"] --> S4
+    S4["Build a local WebRTC offer<br/>with Meet's exact 22 codecs"] --> S5
+    S5["Encode CreateMediaSession<br/>from the offer's parameters"] --> S6
+    S6["Apply the answer<br/>ICE + DTLS to connected"] --> S7
+    S7["Claim every pre-negotiated<br/>SCTP stream id up front"] --> S8
+    S8["media-director: send configuration<br/>wait for allocation, acknowledge it"] --> S9
+    S9["UpdateMeetingDevice: announce<br/>the session as this device's"] --> S10
+    S10["dcrpc: open the channel<br/>read SSRC → device announcements"] --> S11
+    S11(["Attributable RTP"])
+    style S11 fill:#eaf6ec,stroke:#67c23a,stroke-width:2px
+    style S7 fill:#fff4e5,stroke:#e6a23c
+    style S8 fill:#fff4e5,stroke:#e6a23c

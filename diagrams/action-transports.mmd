@@ -1,0 +1,23 @@
+%% The action surface is split across three transports. No single one covers it.
+%% Source: docs/09-collections-and-actions.md
+flowchart TB
+    subgraph HTTP["HTTPS RPC"]
+        H1["Raise hand · CreateHandRaise"]
+        H2["Lower hand · DeleteHandRaise"]
+        H3["Device state at join · UpdateMeetingDevice"]
+    end
+    subgraph MSG["meet_messages channel"]
+        M1["Send chat"]
+    end
+    subgraph DC["dcrpc channel"]
+        D1["Mute / unmute"]
+        D2["Camera on / off 🧩"]
+    end
+    subgraph COLL["collections channel"]
+        C1["Receive everything above"]
+        C2["<b>send nothing</b>"]
+    end
+    style HTTP fill:#e8f4fd,stroke:#409eff
+    style MSG fill:#f4ecf7,stroke:#9b59b6
+    style DC fill:#fff4e5,stroke:#e6a23c
+    style COLL fill:#f5f5f5,stroke:#909399

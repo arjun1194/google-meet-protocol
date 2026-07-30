@@ -1,0 +1,13 @@
+%% The client opens. The server is waiting to be told.
+%% Source: docs/07-media-director.md
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant M as Meet
+    Note over C,M: The client opens. The server is waiting to be told.
+    C->>M: configuration — resolutions I accept
+    M-->>C: allocation "video" v1 — streams I will send
+    C->>M: acknowledgement "video" v1
+    Note over M: Meet RE-SENDS an allocation<br/>until it is acknowledged
+    M-->>C: allocation "video" v2 — participant joined/changed
+    C->>M: acknowledgement "video" v2
